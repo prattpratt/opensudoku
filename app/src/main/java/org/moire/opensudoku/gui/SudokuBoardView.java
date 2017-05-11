@@ -20,14 +20,12 @@
 
 package org.moire.opensudoku.gui;
 
-import java.util.Collection;
-
-import org.moire.opensudoku.R;
-import org.moire.opensudoku.game.Cell;
-import org.moire.opensudoku.game.CellCollection;
-import org.moire.opensudoku.game.CellNote;
-import org.moire.opensudoku.game.SudokuGame;
-import org.moire.opensudoku.game.CellCollection.OnChangeListener;
+import android.animation.Animator;
+import android.animation.AnimatorSet;
+import android.animation.Keyframe;
+import android.animation.ObjectAnimator;
+import android.animation.PropertyValuesHolder;
+import android.animation.ValueAnimator;
 import android.content.Context;
 import android.content.res.TypedArray;
 import android.graphics.Canvas;
@@ -38,12 +36,24 @@ import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
+
+import org.moire.opensudoku.R;
+import org.moire.opensudoku.game.Cell;
+import org.moire.opensudoku.game.CellCollection;
+import org.moire.opensudoku.game.CellCollection.OnChangeListener;
+import org.moire.opensudoku.game.CellGroup;
+import org.moire.opensudoku.game.CellNote;
+import org.moire.opensudoku.game.SudokuGame;
+
 /**
  * Sudoku board widget.
  *
  * @author romario
  */
-public class SudokuBoardView extends View {
+public class SudokuBoardView extends View implements ValueAnimator.AnimatorUpdateListener {
 
 	public static final int DEFAULT_BOARD_SIZE = 100;
 
@@ -53,7 +63,7 @@ public class SudokuBoardView extends View {
 	 */
 	private static final int NO_COLOR = 0;
 
-	private float mCellWidth;
+    private float mCellWidth;
 	private float mCellHeight;
 
 	private Cell mTouchedCell;
@@ -86,7 +96,10 @@ public class SudokuBoardView extends View {
 
 	private Paint mCellValueInvalidPaint;
 
-	public SudokuBoardView(Context context) {
+    private AnimatorSet mCrossAnimation = new AnimatorSet();
+    private List<Animator> mCellsAnimators = new ArrayList<>();;
+
+    public SudokuBoardView(Context context) {
 		this(context, null);
 	}
 
@@ -431,14 +444,15 @@ public class SudokuBoardView extends View {
 					cellTop = Math.round((row * mCellHeight) + paddingTop);
 
 					// draw read-only field background
-					if (!cell.isEditable() && hasBackgroundColorReadOnly) {
-						if (mBackgroundColorReadOnly.getColor() != NO_COLOR) {
-							canvas.drawRect(
-									cellLeft, cellTop,
-									cellLeft + mCellWidth, cellTop + mCellHeight,
-									mBackgroundColorReadOnly);
-						}
-					}
+                    if (!cell.isEditable() && hasBackgroundColorReadOnly
+                            || mCrossAnimation.isRunning()) {
+                        mBackgroundColorReadOnly.setAlpha(cell.getAlpha());
+
+                        canvas.drawRect(
+                                cellLeft, cellTop,
+                                cellLeft + mCellWidth, cellTop + mCellHeight,
+                                mBackgroundColorReadOnly);
+                    }
 
 					// draw cell Text
 					int value = cell.getValue();
@@ -538,7 +552,8 @@ public class SudokuBoardView extends View {
 					break;
 				case MotionEvent.ACTION_UP:
 					mSelectedCell = getCellAtPoint(x, y);
-					invalidate(); // selected cell has changed, update board as soon as you can
+
+                    startAnimation();
 
 					if (mSelectedCell != null) {
 						onCellTapped(mSelectedCell);
@@ -559,7 +574,64 @@ public class SudokuBoardView extends View {
 		return !mReadonly;
 	}
 
-	@Override
+    private void startAnimation() {
+        long durationMillis = 500;
+        long startDelayMillis = 40;
+        mCellsAnimators.clear();
+
+        CellGroup row = mSelectedCell.getRow();
+        int selectedRow = mSelectedCell.getRowIndex();
+        for (int i = 0; selectedRow + i < CellCollection.SUDOKU_SIZE; i++) {
+            ObjectAnimator animator = createCellAnimator(row.getCell(selectedRow + i),
+                    durationMillis, startDelayMillis * i, this);
+            mCellsAnimators.add(animator);
+        }
+
+        for (int i = 1; selectedRow - i >= 0; i++) {
+            ObjectAnimator animator = createCellAnimator(row.getCell(selectedRow - i),
+                    durationMillis, startDelayMillis * i, this);
+            mCellsAnimators.add(animator);
+        }
+
+        CellGroup column = mSelectedCell.getColumn();
+        int selectedColumn = mSelectedCell.getColumnIndex();
+        for (int i = 0; selectedColumn + i < CellCollection.SUDOKU_SIZE; i++) {
+            ObjectAnimator animator = createCellAnimator(column.getCell(selectedColumn + i),
+                    durationMillis, startDelayMillis * i, this);
+            mCellsAnimators.add(animator);
+        }
+
+        for (int i = 1; selectedColumn - i >= 0; i++) {
+            ObjectAnimator animator = createCellAnimator(column.getCell(selectedColumn - i),
+                    durationMillis, startDelayMillis * i, this);
+            mCellsAnimators.add(animator);
+        }
+
+        if (mCrossAnimation != null && mCrossAnimation.isRunning()) {
+            mCrossAnimation.end();
+        }
+
+        mCrossAnimation = new AnimatorSet();
+        mCrossAnimation.playTogether(mCellsAnimators);
+        mCrossAnimation.start();
+    }
+
+    private static ObjectAnimator createCellAnimator(Cell cell, long duration, long delay,
+            ValueAnimator.AnimatorUpdateListener listener) {
+        Keyframe kf0, kf1, kf2;
+        kf0 = Keyframe.ofInt(0f, 0xFF);
+        kf1 = Keyframe.ofInt(0.25f, 0x00);
+        kf2 = Keyframe.ofInt(1f, 0xFF);
+        PropertyValuesHolder fadeInOut = PropertyValuesHolder.ofKeyframe(Cell.ALPHA, kf0, kf1, kf2);
+
+        ObjectAnimator animator = ObjectAnimator.ofPropertyValuesHolder(cell, fadeInOut);
+        animator.setStartDelay(delay);
+        animator.setDuration(duration);
+        animator.addUpdateListener(listener);
+        return animator;
+    }
+
+    @Override
 	public boolean onKeyDown(int keyCode, KeyEvent event) {
 		if (!mReadonly) {
 			switch (keyCode) {
@@ -712,7 +784,12 @@ public class SudokuBoardView extends View {
 		}
 	}
 
-	/**
+    @Override
+    public void onAnimationUpdate(ValueAnimator animation) {
+        invalidate();
+    }
+
+    /**
 	 * Occurs when user tap the cell.
 	 *
 	 * @author romario
@@ -743,10 +820,10 @@ public class SudokuBoardView extends View {
 //			modeString = "MeasureSpec.UNSPECIFIED";
 //			break;
 //		}
-//		
+//
 //		if (modeString == null)
 //			modeString = new Integer(mode).toString();
-//		
+//
 //		return modeString;
 //	}
 

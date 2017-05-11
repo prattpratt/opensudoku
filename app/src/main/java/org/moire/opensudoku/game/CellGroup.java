@@ -79,4 +79,8 @@ public class CellGroup {
 		}
 		return false;
 	}
+
+    public Cell getCell(int i) {
+        return mCells[i];
+    }
 }

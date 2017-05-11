@@ -20,6 +20,8 @@
 
 package org.moire.opensudoku.game;
 
+import android.util.Property;
+
 import java.util.StringTokenizer;
 
 /**
@@ -43,6 +45,25 @@ public class Cell {
 	private CellNote mNote;
 	private boolean mEditable;
 	private boolean mValid;
+
+    private int mAlpha = 0xFF;
+
+    /**
+     * A Property wrapper around the <code>alpha</code> functionality handled by the
+     * {@link #setAlpha} and {@link #getAlpha} methods.
+     */
+    public static final Property<Cell, Integer> ALPHA = new Property<Cell, Integer>(Integer.class, "alpha") {
+
+        @Override
+        public void set(Cell object, Integer value) {
+            object.setAlpha(value);
+        }
+
+        @Override
+        public Integer get(Cell object) {
+            return object.getAlpha();
+        }
+    };
 
 	/**
 	 * Creates empty editable cell.
@@ -242,8 +263,6 @@ public class Cell {
 	 * Creates instance from given string (string which has been
 	 * created by {@link #serialize(StringBuilder)} or {@link #serialize()} method).
 	 * earlier.
-	 *
-	 * @param note
 	 */
 	public static Cell deserialize(String cellData) {
 		StringTokenizer data = new StringTokenizer(cellData, "|");
@@ -285,4 +304,12 @@ public class Cell {
 
 		}
 	}
+
+    public int getAlpha() {
+        return mAlpha;
+    }
+
+    public void setAlpha(int alpha) {
+        this.mAlpha = alpha;
+    }
 }
